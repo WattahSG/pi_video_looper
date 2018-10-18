@@ -64,7 +64,7 @@ class VideoLooper(object):
                                              .translate(None, ',') \
                                              .split())
         # Load sound volume file name value
-        self._sound_vol_file = self._config.get('omxplayer', 'sound_vol_file');
+        self._sound_vol_file = self._config.get('omxplayer', 'sound_vol_file')
         # default value to 0 millibels (omxplayer)
         self._sound_vol = 0
         # Initialize pygame and display a blank screen.
@@ -97,7 +97,7 @@ class VideoLooper(object):
         return importlib.import_module('.' + module, 'Adafruit_Video_Looper') \
             .create_file_reader(self._config)
 
-    def _is_number(iself, s):
+    def _is_number(self, s):
         try:
             float(s) 
             return True
@@ -137,6 +137,7 @@ class VideoLooper(object):
     def _blank_screen(self):
         """Render a blank screen filled with the background color."""
         self._screen.fill(self._bgcolor)
+        self._render_logo()
         pygame.display.update()
 
     def _render_text(self, message, font=None):
@@ -148,12 +149,16 @@ class VideoLooper(object):
             font = self._small_font
         return font.render(message, True, self._fgcolor, self._bgcolor)
 
+    def _render_logo(self):
+        logo = pygame.image.load("~/Pictures/logo.png")
+        self._screen.blit(logo, logo.get_rect())
+
     def _animate_countdown(self, playlist, seconds=10):
         """Print text with the number of loaded movies and a quick countdown
         message if the on screen display is enabled.
         """
         # Print message to console with number of movies in playlist.
-        message = 'Found {0} movie{1}.'.format(playlist.length(), 
+        message = 'Found {0} video{1}.'.format(playlist.length(), 
             's' if playlist.length() >= 2 else '')
         self._print(message)
         # Do nothing else if the OSD is turned off.

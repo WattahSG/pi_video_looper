@@ -18,7 +18,6 @@ class USBDriveReader(object):
                                         readonly=self._readonly)
         self._mounter.start_monitor()
 
-
     def _load_config(self, config):
         self._mount_path = config.get('usb_drive', 'mount_path')
         self._readonly = config.getboolean('usb_drive', 'readonly')

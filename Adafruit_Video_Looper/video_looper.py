@@ -12,7 +12,7 @@ import time
 import pygame
 
 from model import Playlist
-
+from overlay import Overlay
 
 # Basic video looper architecure:
 #
@@ -31,12 +31,14 @@ from model import Playlist
 #   for the two provided file readers and their public interface.
 #
 # - Similarly a video player modules needs to define a top level create_player
-#   function that takes in configuration.  See omxplayer.py and hello_video.py
-#   for the two provided video players and their public interface.
+#   function that takes in configuration.  See omxplayer.py for the provided
+#   video players and its public interface.
 #
 # - Future file readers and video players can be provided and referenced in the
 #   config to extend the video player use to read from different file sources
 #   or use different video players.
+
+
 class VideoLooper(object):
 
     def __init__(self, config_path):
@@ -46,22 +48,25 @@ class VideoLooper(object):
         # Load the configuration.
         self._config = ConfigParser.SafeConfigParser()
         if len(self._config.read(config_path)) == 0:
-            raise RuntimeError('Failed to find configuration file at {0}, is the application properly installed?'.format(config_path))
-        self._console_output = self._config.getboolean('video_looper', 'console_output')
+            raise RuntimeError('Failed to find configuration file at {0},\
+            is the application properly installed?'.format(config_path))
+        self._console_output = self._config.getboolean(
+            'video_looper', 'console_output')
         # Load configured video player and file reader modules.
         self._player = self._load_player()
         self._reader = self._load_file_reader()
         # Load other configuration values.
         self._osd = self._config.getboolean('video_looper', 'osd')
         self._is_random = self._config.getboolean('video_looper', 'is_random')
-        self._keyboard_control = self._config.getboolean('video_looper', 'keyboard_control')
-        # Parse string of 3 comma separated values like "255, 255, 255" into 
+        self._keyboard_control = self._config.getboolean(
+            'video_looper', 'keyboard_control')
+        # Parse string of 3 comma separated values like "255, 255, 255" into
         # list of ints for colors.
-        self._bgcolor = map(int, self._config.get('video_looper', 'bgcolor') \
-                                             .translate(None, ',') \
+        self._bgcolor = map(int, self._config.get('video_looper', 'bgcolor')
+                                             .translate(None, ',')
                                              .split())
-        self._fgcolor = map(int, self._config.get('video_looper', 'fgcolor') \
-                                             .translate(None, ',') \
+        self._fgcolor = map(int, self._config.get('video_looper', 'fgcolor')
+                                             .translate(None, ',')
                                              .split())
         # Load sound volume file name value
         self._sound_vol_file = self._config.get('omxplayer', 'sound_vol_file')
@@ -71,14 +76,24 @@ class VideoLooper(object):
         pygame.display.init()
         pygame.font.init()
         pygame.mouse.set_visible(False)
-        size = (pygame.display.Info().current_w, pygame.display.Info().current_h)
+        size = (pygame.display.Info().current_w,
+                pygame.display.Info().current_h)
         self._screen = pygame.display.set_mode(size, pygame.FULLSCREEN)
         self._blank_screen()
+        # Overlays
+        self._overlays = []
+        overlays = self._config.get('video_looper', 'overlays')\
+                       .translate(None, ' \t\r\n.') \
+                       .split(',')
+        for overlay in overlays:
+            self._overlays.append(Overlay(self._config, overlay))
+        for overlay in self._overlays:
+            overlay.display()
         # Set other static internal state.
         self._extensions = self._player.supported_extensions()
         self._small_font = pygame.font.Font(None, 50)
-        self._big_font   = pygame.font.Font(None, 250)
-        self._running    = True
+        self._big_font = pygame.font.Font(None, 250)
+        self._running = True
 
     def _print(self, message):
         """Print message to standard output if console output is enabled."""
@@ -99,11 +114,11 @@ class VideoLooper(object):
 
     def _is_number(self, s):
         try:
-            float(s) 
+            float(s)
             return True
         except ValueError:
             return False
-    
+
     def _build_playlist(self):
         """Search all the file reader paths for movie files with the provided
         extensions.
@@ -112,6 +127,12 @@ class VideoLooper(object):
         paths = self._reader.search_paths()
         # Enumerate all movie files inside those paths.
         movies = []
+        # If is playlist file then start building playlist
+        if os.path.isfile(paths[0]):
+            with open(paths[0], 'r') as playlist_file:
+                movies.extend(f.strip() for f in playlist_file)
+            # Create a playlist with the list of movies.
+            return Playlist(movies, self._is_random)
         for ex in self._extensions:
             for path in paths:
                 # Skip paths that don't exist or are files.
@@ -119,13 +140,14 @@ class VideoLooper(object):
                     continue
                 # Ignore hidden files (useful when file loaded on usb
                 # key from an OSX computer
-                movies.extend(['{0}/{1}'.format(path.rstrip('/'), x) \
-                               for x in os.listdir(path) \
-                               if re.search('\.{0}$'.format(ex), x, 
-                                            flags=re.IGNORECASE) and \
+                movies.extend(['{0}/{1}'.format(path.rstrip('/'), x)
+                               for x in os.listdir(path)
+                               if re.search('\.{0}$'.format(ex), x,
+                                            flags=re.IGNORECASE) and
                                x[0] is not '.'])
                 # Get the video volume from the file in the usb key
-                sound_vol_file_path = '{0}/{1}'.format(path.rstrip('/'), self._sound_vol_file)
+                sound_vol_file_path = '{0}/{1}'.format(
+                    path.rstrip('/'), self._sound_vol_file)
                 if os.path.exists(sound_vol_file_path):
                     with open(sound_vol_file_path, 'r') as sound_file:
                         sound_vol_string = sound_file.readline()
@@ -137,7 +159,6 @@ class VideoLooper(object):
     def _blank_screen(self):
         """Render a blank screen filled with the background color."""
         self._screen.fill(self._bgcolor)
-        self._render_logo()
         pygame.display.update()
 
     def _render_text(self, message, font=None):
@@ -149,17 +170,13 @@ class VideoLooper(object):
             font = self._small_font
         return font.render(message, True, self._fgcolor, self._bgcolor)
 
-    def _render_logo(self):
-        logo = pygame.image.load("~/Pictures/logo.png")
-        self._screen.blit(logo, logo.get_rect())
-
-    def _animate_countdown(self, playlist, seconds=10):
+    def _animate_countdown(self, playlist, seconds=5):
         """Print text with the number of loaded movies and a quick countdown
         message if the on screen display is enabled.
         """
         # Print message to console with number of movies in playlist.
-        message = 'Found {0} video{1}.'.format(playlist.length(), 
-            's' if playlist.length() >= 2 else '')
+        message = 'Found {0} video{1}.'\
+            .format(playlist.length(), 's' if playlist.length() >= 2 else '')
         self._print(message)
         # Do nothing else if the OSD is turned off.
         if not self._osd:
@@ -226,12 +243,14 @@ class VideoLooper(object):
                 if movie is not None:
                     # Start playing the first available movie.
                     self._print('Playing movie: {0}'.format(movie))
-                    self._player.play(movie, loop=playlist.length() == 1, vol = self._sound_vol)
+                    self._player.play(
+                        movie, loop=playlist.length() == 1,
+                        vol=self._sound_vol)
             # Check for changes in the file search path (like USB drives added)
             # and rebuild the playlist.
             if self._reader.is_changed():
-                self._player.stop(3)  # Up to 3 second delay waiting for old 
-                                      # player to stop.
+                self._player.stop(3)  # Up to 3 second delay waiting for old
+                # player to stop.
                 # Rebuild playlist and show countdown again (if OSD enabled).
                 playlist = self._build_playlist()
                 self._prepare_to_run_playlist(playlist)
@@ -243,13 +262,16 @@ class VideoLooper(object):
                         if event.key == pygame.K_ESCAPE:
                             self.quit()
             # Give the CPU some time to do other tasks.
-            time.sleep(0.002)
+            time.sleep(0.02)
 
     def quit(self):
         """Shut down the program"""
         self._running = False
         if self._player is not None:
             self._player.stop()
+        for overlay in self._overlays:
+            if overlay is not None:
+                overlay.stop()
         pygame.quit()
 
     def signal_quit(self, signal, frame):

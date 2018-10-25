@@ -3,6 +3,7 @@
 # License: GNU GPLv2, see LICENSE.txt
 import random
 
+
 class Playlist(object):
     """Representation of a playlist of movies."""
 

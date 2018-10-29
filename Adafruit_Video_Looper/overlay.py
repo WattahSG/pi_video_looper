@@ -4,7 +4,7 @@ import subprocess
 
 class Overlay(object):
 
-    def __init__(self, config, name, layer=1):
+    def __init__(self, config, name, layer=2):
         self._process = None
         self._load_config(config, name)
         self._layer = layer

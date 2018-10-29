@@ -21,7 +21,9 @@ class OMXPlayer(object):
                                  .split(',')
         self._extra_args = config.get('omxplayer', 'extra_args').split()
         self._sound = config.get('omxplayer', 'sound').lower()
-        assert self._sound in ('hdmi', 'local', 'both'), 'Unknown omxplayer sound configuration value: {0} Expected hdmi, local, or both.'.format(self._sound)
+        assert self._sound in ('hdmi', 'local', 'both'), 'Unknown omxplayer \
+        sound configuration value: {0} Expected hdmi, local, or both.'\
+        .format(self._sound)
 
     def supported_extensions(self):
         """Return list of supported file extensions."""

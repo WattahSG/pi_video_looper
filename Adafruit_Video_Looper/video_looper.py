@@ -5,8 +5,9 @@ import ConfigParser
 import importlib
 import os
 import re
-import sys
 import signal
+import sys
+import threading
 import time
 
 import pygame
@@ -68,6 +69,14 @@ class VideoLooper(object):
         self._fgcolor = map(int, self._config.get('video_looper', 'fgcolor')
                                              .translate(None, ',')
                                              .split())
+        self._botbgcolor = map(int, self._config
+                               .get('video_looper', 'botbgcolor')
+                               .translate(None, ',')
+                               .split())
+        self._botfgcolor = map(int, self._config
+                               .get('video_looper', 'botfgcolor')
+                               .translate(None, ',')
+                               .split())
         # Load sound volume file name value
         self._sound_vol_file = self._config.get('omxplayer', 'sound_vol_file')
         # default value to 0 millibels (omxplayer)
@@ -79,6 +88,7 @@ class VideoLooper(object):
         size = (pygame.display.Info().current_w,
                 pygame.display.Info().current_h)
         self._screen = pygame.display.set_mode(size, pygame.FULLSCREEN)
+        self._bottom_screen = pygame.surface.Surface((1000, 240))
         self._blank_screen()
         # Overlays
         self._overlays = []
@@ -91,8 +101,10 @@ class VideoLooper(object):
             overlay.display()
         # Set other static internal state.
         self._extensions = self._player.supported_extensions()
-        self._small_font = pygame.font.Font(None, 50)
-        self._big_font = pygame.font.Font(None, 250)
+        self._small_font = pygame.font.Font(
+            "/home/pi/.fonts/LibreFranklin-Regular.ttf", 30)
+        self._big_font = pygame.font.Font(
+            "/home/pi/.fonts/LibreFranklin-Regular.ttf", 250)
         self._running = True
 
     def _print(self, message):
@@ -159,6 +171,9 @@ class VideoLooper(object):
     def _blank_screen(self):
         """Render a blank screen filled with the background color."""
         self._screen.fill(self._bgcolor)
+        # Add the bottom background screen
+        self._bottom_screen.fill(self._botbgcolor)
+        self._screen.blit(self._bottom_screen, (0, 1678))
         pygame.display.update()
 
     def _render_text(self, message, font=None):
@@ -170,7 +185,12 @@ class VideoLooper(object):
             font = self._small_font
         return font.render(message, True, self._fgcolor, self._bgcolor)
 
-    def _animate_countdown(self, playlist, seconds=5):
+    def _render_bot_text(self, message, font=None):
+        if font is None:
+            font = self._small_font
+        return font.render(message, True, self._botfgcolor, self._botbgcolor)
+
+    def _animate_countdown(self, playlist, seconds=2):
         """Print text with the number of loaded movies and a quick countdown
         message if the on screen display is enabled.
         """
@@ -192,12 +212,64 @@ class VideoLooper(object):
             l2w, l2h = label2.get_size()
             # Clear screen and draw text with line1 above line2 and all
             # centered horizontally and vertically.
-            self._screen.fill(self._bgcolor)
+            # self._screen.fill(self._bgcolor)
             self._screen.blit(label1, (sw/2-l1w/2, sh/2-l2h/2-l1h))
             self._screen.blit(label2, (sw/2-l2w/2, sh/2-l2h/2))
             pygame.display.update()
             # Pause for a second between each frame.
             time.sleep(1)
+
+    def _is_ticker_changed(self):
+        tickerReceivedAt = os.path.getmtime(self._ticker_path)
+        if tickerReceivedAt > self._ticker_received_at:
+            self._ticker_received_at = tickerReceivedAt
+            return True
+        else:
+            return False
+
+    def _clock(self):
+        while self._running:
+            localtime = time.localtime(time.time())
+            hour = localtime.tm_hour
+            minute = localtime.tm_min
+            label = self._render_bot_text("{0:02}:{1:02}".format(hour, minute))
+            self._bottom_screen.blit(label, (30, 0))
+            self._screen.blit(self._bottom_screen, (0, 1682))
+            pygame.display.update()
+            time.sleep(1)
+
+    def _running_text(self):
+        self._ticker_path = '/home/pi/Documents/ticker.txt'
+        self._ticker_received_at = os.path.getmtime(self._ticker_path)
+        while self._running:
+            displayLength = 790
+            textSurface = pygame.surface.Surface((displayLength, 30))
+            lines = ""
+            with open(self._ticker_path) as doc:
+                for l in doc:
+                    lines += l.strip() + " *** "
+            label = self._render_bot_text(lines)
+            labelWidth = label.get_width()
+            med = labelWidth / displayLength
+            scrollLength = displayLength + labelWidth
+            startX = scrollLength + displayLength
+            endX = -labelWidth
+            x1 = displayLength
+            x2 = startX
+            while not self._is_ticker_changed():
+                textSurface.fill(self._botbgcolor)
+                textSurface.blit(label, (x1, 0))
+                textSurface.blit(label, (x2, 0))
+                self._bottom_screen.blit(textSurface, (30, 187))
+                self._screen.blit(self._bottom_screen, (0, 1682))
+                pygame.display.update()
+                time.sleep(0.02)
+                if x1 <= endX:
+                    x1 = startX
+                if x2 <= endX:
+                    x2 = startX
+                x1 = x1 - 7
+                x2 = x2 - 7
 
     def _idle_message(self):
         """Print idle message from file reader."""
@@ -227,6 +299,13 @@ class VideoLooper(object):
         if playlist.length() > 0:
             self._animate_countdown(playlist)
             self._blank_screen()
+            pygame.display.update()
+            thread = threading.Thread(target=self._clock)
+            thread.setDaemon(True)
+            thread.start()
+            thread2 = threading.Thread(target=self._running_text)
+            thread2.setDaemon(True)
+            thread2.start()
         else:
             self._idle_message()
 
@@ -262,7 +341,7 @@ class VideoLooper(object):
                         if event.key == pygame.K_ESCAPE:
                             self.quit()
             # Give the CPU some time to do other tasks.
-            time.sleep(0.02)
+            time.sleep(0.002)
 
     def quit(self):
         """Shut down the program"""
@@ -275,7 +354,7 @@ class VideoLooper(object):
         pygame.quit()
 
     def signal_quit(self, signal, frame):
-        """Shut down the program, meant to by called by signal handler."""
+        """Shut down the program, meant to be called by signal handler."""
         self.quit()
 
 

@@ -12,7 +12,6 @@ class PlaylistReader(object):
     def _load_config(self, config):
         self._path = config.get('playlist', 'path')
         self._time_modified = os.path.getmtime(self._path)
-        print(self._time_modified)
 
     def search_paths(self):
         """Return a list of paths to search for files."""

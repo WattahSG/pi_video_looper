@@ -17,8 +17,11 @@ echo "=========================="
 echo "Installing video_looper program..."
 echo "=================================="
 mkdir -p /mnt/usbdrive0 # This is very important if you put your system in readonly after
+# mkdir -p ~/.kiosk/Pictures
+# mkdir -p ~/.kiosk/Videos
 python setup.py install --force
 cp video_looper.ini /boot/video_looper.ini
+# cp -a ./pngview/. ~/pngview/
 
 echo "Configuring video_looper to run on start..."
 echo "==========================================="

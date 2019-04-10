@@ -1,0 +1,1 @@
+sudo cp libraspidmx.so* /usr/lib

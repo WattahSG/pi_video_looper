@@ -1,4 +1,5 @@
 import os
+from os.path import expanduser
 import subprocess
 
 
@@ -10,14 +11,16 @@ class Overlay(object):
         self._layer = layer
 
     def _load_config(self, config, name):
-        self._overlay_photo = config.get(name, 'path')
+        home = '/home/wattah'
+        self._overlay_photo = home + '/' + config.get(name, 'path')
         self._x = config.get(name, 'x')
         self._y = config.get(name, 'y')
 
     def display(self):
-        args = ['/home/pi/raspidmx/pngview/pngview', '-b 0']
-        args.extend(['-l {0}'.format(self._layer), '-x {0}'.format(self._x),
-                     '-y {0}'.format(self._y), self._overlay_photo])
+        home = '/home/wattah'
+        args = ['{}/pngview/pngview'.format(home), '-b 0']
+        args.extend(['-l {}'.format(self._layer), '-x {}'.format(self._x),
+                     '-y {}'.format(self._y), self._overlay_photo])
         self._process = subprocess.Popen(args,
                                          stdout=open(os.devnull, 'wb'),
                                          close_fds=True)

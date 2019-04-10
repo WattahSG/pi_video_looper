@@ -11,7 +11,10 @@ class PlaylistReader(object):
 
     def _load_config(self, config):
         self._path = config.get('playlist', 'path')
-        self._time_modified = os.path.getmtime(self._path)
+        if os.path.isfile(self._path):
+            self._time_modified = os.path.getmtime(self._path)
+        else:
+            self._time_modified = 0
 
     def search_paths(self):
         """Return a list of paths to search for files."""
@@ -19,6 +22,8 @@ class PlaylistReader(object):
 
     def is_changed(self):
         """Return true if the playlist file has been modified."""
+        if not os.path.isfile(self._path):
+            return True
         timeModified = os.path.getmtime(self._path)
         if timeModified > self._time_modified:
             self._time_modified = timeModified

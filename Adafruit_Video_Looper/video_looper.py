@@ -3,9 +3,12 @@
 # License: GNU GPLv2, see LICENSE.txt
 import ConfigParser
 import importlib
+import json
 import os
+from os.path import expanduser
 import re
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -14,7 +17,7 @@ import pygame
 
 from model import Playlist
 from overlay import Overlay
-
+os.environ["SDL_VIDEODRIVER"] = "dummy"
 # Basic video looper architecure:
 #
 # - VideoLooper class contains all the main logic for running the looper program.
@@ -101,10 +104,17 @@ class VideoLooper(object):
             overlay.display()
         # Set other static internal state.
         self._extensions = self._player.supported_extensions()
+        home = '/home/wattah'
         self._small_font = pygame.font.Font(
-            "/home/pi/.fonts/LibreFranklin-Regular.ttf", 30)
+            "{}/.fonts/LibreFranklin-Regular.ttf".format(home), 30)
+        self._medium_font = pygame.font.Font(
+            "{}/.fonts/LibreFranklin-Regular.ttf".format(home), 70)
         self._big_font = pygame.font.Font(
-            "/home/pi/.fonts/LibreFranklin-Regular.ttf", 250)
+            "{}/.fonts/LibreFranklin-Regular.ttf".format(home), 250)
+        self._ticker_path = '/run/shm/ticker.txt'
+        self._ticker_received_at = 0
+        self._running_text_type = "ticker"
+        self._lines = self._get_ticker_lines()
         self._running = True
 
     def _print(self, message):
@@ -185,7 +195,15 @@ class VideoLooper(object):
             font = self._small_font
         return font.render(message, True, self._fgcolor, self._bgcolor)
 
-    def _render_bot_text(self, message, font=None):
+    def _render_bot_text(self, message):
+        font = self._medium_font
+        if self._running_text_type == "error":
+            text_color = (255, 3, 58)
+        else:
+            text_color = self._botfgcolor
+        return font.render(message, True, text_color, self._botbgcolor)
+
+    def _render_clock_text(self, message, font=None):
         if font is None:
             font = self._small_font
         return font.render(message, True, self._botfgcolor, self._botbgcolor)
@@ -213,42 +231,67 @@ class VideoLooper(object):
             # Clear screen and draw text with line1 above line2 and all
             # centered horizontally and vertically.
             # self._screen.fill(self._bgcolor)
-            self._screen.blit(label1, (sw/2-l1w/2, sh/2-l2h/2-l1h))
-            self._screen.blit(label2, (sw/2-l2w/2, sh/2-l2h/2))
+            self._screen.blit(label1, (sw / 2 - l1w / 2, sh / 2 - l2h / 2 - l1h))
+            self._screen.blit(label2, (sw / 2 - l2w / 2, sh / 2 - l2h / 2))
             pygame.display.update()
             # Pause for a second between each frame.
             time.sleep(1)
-
-    def _is_ticker_changed(self):
-        tickerReceivedAt = os.path.getmtime(self._ticker_path)
-        if tickerReceivedAt > self._ticker_received_at:
-            self._ticker_received_at = tickerReceivedAt
-            return True
-        else:
-            return False
 
     def _clock(self):
         while self._running:
             localtime = time.localtime(time.time())
             hour = localtime.tm_hour
             minute = localtime.tm_min
-            label = self._render_bot_text("{0:02}:{1:02}".format(hour, minute))
+            label = self._render_clock_text("{0:02}:{1:02}".format(hour, minute))
             self._bottom_screen.blit(label, (30, 0))
             self._screen.blit(self._bottom_screen, (0, 1682))
             pygame.display.update()
             time.sleep(1)
 
-    def _running_text(self):
-        self._ticker_path = '/home/pi/Documents/ticker.txt'
-        self._ticker_received_at = os.path.getmtime(self._ticker_path)
-        while self._running:
-            displayLength = 790
-            textSurface = pygame.surface.Surface((displayLength, 30))
-            lines = ""
+    def _is_ticker_changed(self):
+        try:
+            tickerReceivedAt = os.path.getmtime(self._ticker_path)
+        except OSError:
+            tickerReceivedAt = 0
+        if tickerReceivedAt > self._ticker_received_at:
+            self._ticker_received_at = tickerReceivedAt
+            return True
+        else:
+            return False
+
+    def _should_update_running_text(self):
+        if self._running_text_type == "ticker":
+            return self._is_ticker_changed() or self._lines != self._get_ticker_lines()
+        elif self._running_text_type == "error":
+            return self._lines != self._error_content
+        else:
+            return False
+
+    def _get_ticker_lines(self):
+        lines = ""
+        try:
             with open(self._ticker_path) as doc:
                 for l in doc:
-                    lines += l.strip() + " *** "
-            label = self._render_bot_text(lines)
+                    lines += l.strip() + "    -    "
+        except IOError:
+            lines = ""
+        return lines
+
+    def _get_lines(self):
+        if self._running_text_type == "ticker":
+            return self._get_ticker_lines()
+        elif self._running_text_type == "error":
+            return self._error_content
+        else:
+            return ""
+
+    def _running_text(self):
+        while self._running:
+            displayLength = 790
+            text_height = 90
+            textSurface = pygame.surface.Surface((displayLength, text_height))
+            self._lines = self._get_lines()
+            label = self._render_bot_text(self._lines)
             labelWidth = label.get_width()
             med = labelWidth / displayLength
             scrollLength = displayLength + labelWidth
@@ -256,11 +299,11 @@ class VideoLooper(object):
             endX = -labelWidth
             x1 = displayLength
             x2 = startX
-            while not self._is_ticker_changed():
+            while not self._should_update_running_text():
                 textSurface.fill(self._botbgcolor)
                 textSurface.blit(label, (x1, 0))
                 textSurface.blit(label, (x2, 0))
-                self._bottom_screen.blit(textSurface, (30, 187))
+                self._bottom_screen.blit(textSurface, (30, 240 - text_height - 10))
                 self._screen.blit(self._bottom_screen, (0, 1682))
                 pygame.display.update()
                 time.sleep(0.02)
@@ -270,6 +313,31 @@ class VideoLooper(object):
                     x2 = startX
                 x1 = x1 - 7
                 x2 = x2 - 7
+
+    def _message_pipe(self):
+        pipe_path = "/run/shm/message_pipe"
+        if not os.path.exists(pipe_path):
+            os.mkfifo(pipe_path, 0666)
+        pipe_fd = os.open(pipe_path, os.O_RDONLY | os.O_NONBLOCK)
+        with os.fdopen(pipe_fd) as pipe:
+            while True:
+                message = pipe.read()
+                if message:
+                    print("Received: '%s'" % message)
+                    message_dict = json.loads(message)
+                    self._show_message(message_dict)
+                time.sleep(0.5)
+
+    def _show_message(self, message):
+        time_elapse = message["time_elapse"]
+        message_type = message["message_type"]
+        content = message["content"]
+        print("time elapse: {0}, message_type: {1}, content: {2}".format(time_elapse, message_type, content))
+        if message_type == "error":
+            self._error_content = content
+        self._running_text_type = "error"
+        time.sleep(time_elapse)
+        self._running_text_type = "ticker"
 
     def _idle_message(self):
         """Print idle message from file reader."""
@@ -284,12 +352,12 @@ class VideoLooper(object):
         lw, lh = label.get_size()
         sw, sh = self._screen.get_size()
         self._screen.fill(self._bgcolor)
-        self._screen.blit(label, (sw/2-lw/2, sh/2-lh/2))
+        self._screen.blit(label, (sw / 2 - lw / 2, sh / 2 - lh / 2))
         # If keyboard control is enabled, display message about it
         if self._keyboard_control:
             label2 = self._render_text('press ESC to quit')
             l2w, l2h = label2.get_size()
-            self._screen.blit(label2, (sw/2-l2w/2, sh/2-l2h/2+lh))
+            self._screen.blit(label2, (sw / 2 - l2w / 2, sh / 2 - l2h / 2 + lh))
         pygame.display.update()
 
     def _prepare_to_run_playlist(self, playlist):
@@ -300,12 +368,18 @@ class VideoLooper(object):
             self._animate_countdown(playlist)
             self._blank_screen()
             pygame.display.update()
+
             thread = threading.Thread(target=self._clock)
             thread.setDaemon(True)
             thread.start()
+
             thread2 = threading.Thread(target=self._running_text)
             thread2.setDaemon(True)
             thread2.start()
+
+            thread3 = threading.Thread(target=self._message_pipe)
+            thread3.setDaemon(True)
+            thread3.start()
         else:
             self._idle_message()
 
@@ -340,6 +414,10 @@ class VideoLooper(object):
                         # If pressed key is ESC quit program
                         if event.key == pygame.K_ESCAPE:
                             self.quit()
+                        if event.key == pygame.K_p:
+                            os.system('systemctl poweroff -i')
+                        if event.key == pygame.K_r:
+                            os.system('reboot')
             # Give the CPU some time to do other tasks.
             time.sleep(0.002)
 

@@ -8,7 +8,7 @@ import time
 import pyudev
 
 
-class USBDriveMounter(object):
+class USBDriveMounter:
     """Service for automatically mounting attached USB drives."""
 
     def __init__(self, root='/mnt/usbdrive', readonly=False):
@@ -34,8 +34,8 @@ class USBDriveMounter(object):
         """
         self.remove_all()
         # Enumerate USB drive partitions by path like /dev/sda1, etc.
-        nodes = [x.device_node for x in self._context.list_devices(subsystem='block', 
-                                                                   DEVTYPE='partition') \
+        nodes = [x.device_node for x in self._context.list_devices(subsystem='block',
+                                                                   DEVTYPE='partition')
                  if 'ID_BUS' in x and x['ID_BUS'] == 'usb']
         # Mount each drive under the mount root.
         for i, node in enumerate(nodes):
@@ -72,9 +72,9 @@ if __name__ == '__main__':
     drive_mounter = USBDriveMounter(readonly=True)
     drive_mounter.mount_all()
     drive_mounter.start_monitor()
-    print 'Listening for USB drive changes (press Ctrl-C to quite)...'
+    print 'Listening for USB drive changes (press Ctrl-C to quit)...'
     while True:
         if drive_mounter.poll_changes():
-            print 'USB drives changed!'
+            print('USB drives changed!')
             drive_mounter.mount_all()
         time.sleep(0)

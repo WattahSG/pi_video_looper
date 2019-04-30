@@ -15,6 +15,7 @@ apt update && apt -y install git build-essential python3-dev python3 python3-pip
 
 echo "Installing video_looper program..."
 echo "=================================="
+cd "$(dirname "$0")"
 mkdir -p /mnt/usbdrive0 # This is very important if you put your system in readonly after
 # mkdir -p ~/.kiosk/Pictures
 # mkdir -p ~/.kiosk/Videos

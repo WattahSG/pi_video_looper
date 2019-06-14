@@ -14,9 +14,10 @@ import threading
 import time
 
 import pygame
+import pygame.freetype
 
-from .model import Playlist
-from overlay import Overlay
+from Adafruit_Video_Looper.model import Playlist
+from Adafruit_Video_Looper.overlay import Overlay
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 # Basic video looper architecure:
 #
@@ -86,17 +87,17 @@ class VideoLooper:
         self._sound_vol = 0
         # Initialize pygame and display a blank screen.
         pygame.display.init()
-        pygame.font.init()
+        pygame.freetype.init()
         pygame.mouse.set_visible(False)
         size = (pygame.display.Info().current_w,
                 pygame.display.Info().current_h)
         self._screen = pygame.display.set_mode(size, pygame.FULLSCREEN)
-        self._bottom_screen = pygame.surface.Surface((1000, 240))
+        self._bottom_screen = pygame.surface.Surface((240, 1080))
         self._blank_screen()
         # Overlays
         self._overlays = []
         overlays = self._config.get('video_looper', 'overlays')\
-                       .translate(None, ' \t\r\n.') \
+                       .translate(str.maketrans('', '', ' \t\r\n.')) \
                        .split(',')
         for overlay in overlays:
             self._overlays.append(Overlay(self._config, overlay))
@@ -105,11 +106,11 @@ class VideoLooper:
         # Set other static internal state.
         self._extensions = self._player.supported_extensions()
         home = '/home/wattah'
-        self._small_font = pygame.font.Font(
+        self._small_font = pygame.freetype.Font(
             "{}/.fonts/LibreFranklin-Regular.ttf".format(home), 30)
-        self._medium_font = pygame.font.Font(
+        self._medium_font = pygame.freetype.Font(
             "{}/.fonts/LibreFranklin-Regular.ttf".format(home), 70)
-        self._big_font = pygame.font.Font(
+        self._big_font = pygame.freetype.Font(
             "{}/.fonts/LibreFranklin-Regular.ttf".format(home), 250)
         self._ticker_path = '/run/shm/ticker.txt'
         self._ticker_received_at = 0
@@ -183,7 +184,7 @@ class VideoLooper:
         self._screen.fill(self._bgcolor)
         # Add the bottom background screen
         self._bottom_screen.fill(self._botbgcolor)
-        self._screen.blit(self._bottom_screen, (0, 1678))
+        self._screen.blit(self._bottom_screen, (1616, 0))
         pygame.display.update()
 
     def _render_text(self, message, font=None):
@@ -193,7 +194,8 @@ class VideoLooper:
         # Default to small font if not provided.
         if font is None:
             font = self._small_font
-        return font.render(message, True, self._fgcolor, self._bgcolor)
+        surface, rect = font.render(message, self._fgcolor, self._bgcolor, rotation=90)
+        return surface
 
     def _render_bot_text(self, message):
         font = self._medium_font
@@ -201,12 +203,14 @@ class VideoLooper:
             text_color = (255, 3, 58)
         else:
             text_color = self._botfgcolor
-        return font.render(message, True, text_color, self._botbgcolor)
+        surface, rect = font.render(message, text_color, self._botbgcolor, rotation=90)
+        return surface
 
     def _render_clock_text(self, message, font=None):
         if font is None:
             font = self._small_font
-        return font.render(message, True, self._botfgcolor, self._botbgcolor)
+        surface, rect = font.render(message, self._botfgcolor, self._botbgcolor, rotation=90)
+        return surface
 
     def _animate_countdown(self, playlist, seconds=2):
         """Print text with the number of loaded movies and a quick countdown
@@ -231,7 +235,7 @@ class VideoLooper:
             # Clear screen and draw text with line1 above line2 and all
             # centered horizontally and vertically.
             # self._screen.fill(self._bgcolor)
-            self._screen.blit(label1, (sw / 2 - l1w / 2, sh / 2 - l2h / 2 - l1h))
+            self._screen.blit(label1, (sw / 2 - l1w / 2 - l2w, sh / 2 - l1h / 2))
             self._screen.blit(label2, (sw / 2 - l2w / 2, sh / 2 - l2h / 2))
             pygame.display.update()
             # Pause for a second between each frame.
@@ -243,8 +247,8 @@ class VideoLooper:
             hour = localtime.tm_hour
             minute = localtime.tm_min
             label = self._render_clock_text("{0:02}:{1:02}".format(hour, minute))
-            self._bottom_screen.blit(label, (30, 0))
-            self._screen.blit(self._bottom_screen, (0, 1682))
+            self._bottom_screen.blit(label, (0, 940))
+            self._screen.blit(self._bottom_screen, (1616, 0))
             pygame.display.update()
             time.sleep(1)
 
@@ -289,35 +293,35 @@ class VideoLooper:
         while self._running:
             displayLength = 790
             text_height = 90
-            textSurface = pygame.surface.Surface((displayLength, text_height))
+            textSurface = pygame.surface.Surface((text_height, displayLength))
             self._lines = self._get_lines()
             label = self._render_bot_text(self._lines)
-            labelWidth = label.get_width()
+            labelWidth = label.get_height()
             med = labelWidth / displayLength
             scrollLength = displayLength + labelWidth
-            startX = scrollLength + displayLength
-            endX = -labelWidth
-            x1 = displayLength
+            startX = - scrollLength + 210
+            endX = displayLength + labelWidth
+            x1 = 210
             x2 = startX
             while not self._should_update_running_text():
                 textSurface.fill(self._botbgcolor)
-                textSurface.blit(label, (x1, 0))
-                textSurface.blit(label, (x2, 0))
-                self._bottom_screen.blit(textSurface, (30, 240 - text_height - 10))
-                self._screen.blit(self._bottom_screen, (0, 1682))
+                textSurface.blit(label, (0, x1))
+                textSurface.blit(label, (0, x2))
+                self._bottom_screen.blit(textSurface, (240 - text_height - 10, 240))
+                self._screen.blit(self._bottom_screen, (1616, 0))
                 pygame.display.update()
                 time.sleep(0.02)
-                if x1 <= endX:
+                if x1 >= endX:
                     x1 = startX
-                if x2 <= endX:
+                if x2 >= endX:
                     x2 = startX
-                x1 = x1 - 7
-                x2 = x2 - 7
+                x1 = x1 + 7
+                x2 = x2 + 7
 
     def _message_pipe(self):
         pipe_path = "/run/shm/message_pipe"
         if not os.path.exists(pipe_path):
-            os.mkfifo(pipe_path, 0666)
+            os.mkfifo(pipe_path, 0o666)
         pipe_fd = os.open(pipe_path, os.O_RDONLY | os.O_NONBLOCK)
         with os.fdopen(pipe_fd) as pipe:
             while True:
@@ -389,7 +393,7 @@ class VideoLooper:
         # Get playlist of movies to play from file reader.
         playlist = self._build_playlist()
         self._prepare_to_run_playlist(playlist)
-        self._prepare_background_task
+        self._prepare_background_task()
         # Main loop to play videos in the playlist and listen for file changes.
         while self._running:
             # Load and play a new movie if nothing is playing.
@@ -413,6 +417,8 @@ class VideoLooper:
             if self._keyboard_control:
                 for event in pygame.event.get():
                     if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_n:
+                            self._player.stop(1)
                         # If pressed key is ESC quit program
                         if event.key == pygame.K_ESCAPE:
                             self.quit()
